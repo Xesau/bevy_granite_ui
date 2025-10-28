@@ -1,6 +1,5 @@
 use crate::ui::{
-    EditorUiElement,
-    ToolButtonAction,
+    EditorUiElement, ToolButtonAction,
     colors::{EditorBackgroundColor, EditorColor, EditorTextColor},
 };
 use bevy::prelude::*;
@@ -46,7 +45,7 @@ pub struct EditorUi;
     height: Val::Px(39.0),
     width: Val::Percent(100.0),
     column_gap: Val::Px(2.0),
-    padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(5.0), Val::Px(5.0)),
+    padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::ZERO, Val::ZERO),
     ..default()
 })]
 pub struct MenuBar;
@@ -54,6 +53,35 @@ pub struct MenuBar;
 #[derive(Component)]
 pub struct MenuBarButton {
     pub text: String,
+    pub shortcut_text: Option<String>,
+    pub is_in_submenu: bool,
+    pub is_dropdown: bool,
+}
+
+#[derive(Component)]
+#[require(Node {
+    position_type: PositionType::Relative,
+    padding: UiRect::new(Val::ZERO, Val::ZERO, Val::Px(5.0), Val::Px(5.0)),
+    ..default()
+})]
+pub struct MenuBarDropdownRoot;
+
+#[derive(Component)]
+#[require(Node {
+    position_type: PositionType::Absolute,
+    left: Val::Px(0.0),
+    top: Val::Percent(100.0),
+    display: Display::Flex,
+    flex_direction: FlexDirection::Column,
+    row_gap: Val::Px(5.0),
+    padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(5.0), Val::Px(5.0)),
+    ..default()
+})]
+#[require(EditorBackgroundColor(EditorColor::Background, None, None))]
+#[require(GlobalZIndex(9000))]
+#[require(Visibility::Hidden)]
+pub struct MenuBarDropdown {
+    pub id: String,
 }
 
 reactive_element!(
@@ -65,23 +93,60 @@ reactive_element!(
             Button,
             Node {
                 display: Display::Flex,
-                height: Val::Px(29.0),
+                height: if menu_bar_button.is_in_submenu { Val::Px(26.0) } else { Val::Px(29.0) },
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
                 column_gap: Val::Px(10.0),
-                padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(6.0), Val::Px(6.0)),
+                padding: if menu_bar_button.is_in_submenu {
+                    UiRect::all(Val::Px(5.0))
+                } else {
+                    UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(6.0), Val::Px(6.0))
+                },
                 ..default()
             },
             BorderRadius::all(Val::Px(4.0)),
-            EditorBackgroundColor(EditorColor::MenuBar, Some(EditorColor::MenuBarButtonHover), None),
-            children![(
-                EditorUiElement,
-                Text::new(&menu_bar_button.text),
-                EditorTextColor(EditorColor::Text, None, None),
-                TextFont {
-                    font_size: 13.0,
-                    ..default()
-                }
-            )],
+            EditorBackgroundColor(
+                if menu_bar_button.is_in_submenu {
+                    EditorColor::Background
+                } else {
+                    EditorColor::MenuBar
+                },
+                Some(EditorColor::MenuBarButtonHover),
+                None,
+            ),
+            children![
+                (
+                    EditorUiElement,
+                    Text::new(&menu_bar_button.text),
+                    EditorTextColor(EditorColor::Text, None, None),
+                    TextFont {
+                        font_size: 13.0,
+                        ..default()
+                    }
+                ),
+                (
+                    EditorUiElement,
+                    Node {
+                        display: if menu_bar_button.shortcut_text.is_some() {
+                            Display::Flex
+                        } else {
+                            Display::None
+                        },
+                        ..default()
+                    },
+                    Text::new(
+                        menu_bar_button
+                            .shortcut_text
+                            .as_ref()
+                            .unwrap_or(&String::new())
+                    ),
+                    EditorTextColor(EditorColor::FadedText, None, None),
+                    TextFont {
+                        font_size: 13.0,
+                        ..default()
+                    }
+                )
+            ],
         )
     }
 );
@@ -117,7 +182,19 @@ reactive_element!(Tab, reactive_tab, |tab: &Tab| {
             padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(10.0), Val::Px(10.0)),
             ..default()
         },
-        EditorBackgroundColor(if tab.is_active { EditorColor::TabActive } else { EditorColor::TabBar }, Some(if tab.is_active { EditorColor::TabActive } else { EditorColor::TabHover }), None),
+        EditorBackgroundColor(
+            if tab.is_active {
+                EditorColor::TabActive
+            } else {
+                EditorColor::TabBar
+            },
+            Some(if tab.is_active {
+                EditorColor::TabActive
+            } else {
+                EditorColor::TabHover
+            }),
+            None,
+        ),
         BorderRadius::new(Val::Px(4.0), Val::Px(4.0), Val::Px(0.0), Val::Px(0.0)),
         children![
             (
@@ -147,24 +224,26 @@ reactive_element!(Tab, reactive_tab, |tab: &Tab| {
                 EditorUiElement,
                 Button,
                 Node {
-                    display: if tab.is_active { Display::Flex } else { Display::None },
+                    display: if tab.is_active {
+                        Display::Flex
+                    } else {
+                        Display::None
+                    },
                     height: Val::Px(18.0),
                     width: Val::Px(18.0),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
                     ..default()
                 },
-                children![
-                    (
-                        EditorUiElement,
-                        Text::new("x"),
-                        EditorTextColor(EditorColor::Text, None, None),
-                        TextFont {
-                            font_size: 13.0,
-                            ..default()
-                        }
-                    )
-                ]
+                children![(
+                    EditorUiElement,
+                    Text::new("x"),
+                    EditorTextColor(EditorColor::Text, None, None),
+                    TextFont {
+                        font_size: 13.0,
+                        ..default()
+                    }
+                )]
             )
         ],
     )
@@ -238,7 +317,15 @@ reactive_element!(
                 height: Val::Px(25.0),
                 ..default()
             },
-            EditorBackgroundColor(if tool_button.is_active { EditorColor::Background } else { EditorColor::Button }, None, None),
+            EditorBackgroundColor(
+                if tool_button.is_active {
+                    EditorColor::Background
+                } else {
+                    EditorColor::Button
+                },
+                None,
+                None,
+            ),
             BorderRadius::all(Val::Px(3.0)),
             children![(
                 EditorUiElement,
@@ -261,51 +348,49 @@ pub struct StatusBar {
     pub text: String,
 }
 
-reactive_element!(
-    StatusBar,
-    reactive_status_bar,
-    |status_bar: &StatusBar| {
-        (
-            EditorUiElement,
-            Node {
-                display: Display::Flex,
-                height: Val::Px(20.0),
-                align_items: AlignItems::Center,
-                padding: UiRect::all(Val::Px(10.0)),
-                ..default()
-            },
-            EditorBackgroundColor(EditorColor::Background, None, None),
-            children![
-                (
-                    EditorUiElement,
-                    Text::new(format!("Status: {}", &status_bar.text)),
-                    EditorTextColor(EditorColor::Text, None, None),
-                    TextFont {
-                        font_size: 13.0,
-                        ..default()
-                    }
-                )
-            ]
-        )
-    }
-);
-
-#[derive(Component)]
-pub struct CameraPreview;
-
-reactive_element!(CameraPreview, reactive_camera_preview, |_camera_preview: &CameraPreview| {
+reactive_element!(StatusBar, reactive_status_bar, |status_bar: &StatusBar| {
     (
         EditorUiElement,
         Node {
             display: Display::Flex,
-            flex_grow: 1.0,
-            width: Val::Percent(100.0),
+            height: Val::Px(20.0),
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
+            padding: UiRect::all(Val::Px(10.0)),
             ..default()
         },
+        EditorBackgroundColor(EditorColor::Background, None, None),
+        children![(
+            EditorUiElement,
+            Text::new(format!("Status: {}", &status_bar.text)),
+            EditorTextColor(EditorColor::Text, None, None),
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            }
+        )],
     )
 });
+
+#[derive(Component)]
+pub struct CameraPreview;
+
+reactive_element!(
+    CameraPreview,
+    reactive_camera_preview,
+    |_camera_preview: &CameraPreview| {
+        (
+            EditorUiElement,
+            Node {
+                display: Display::Flex,
+                flex_grow: 1.0,
+                width: Val::Percent(100.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+        )
+    }
+);
 
 #[derive(Component)]
 pub struct FpsCounter {
@@ -325,11 +410,17 @@ reactive_element!(
                 align_items: AlignItems::Center,
                 ..default()
             },
-            Text::new(format!("FPS: {}", fps_counter.fps.map(|fps| (fps as u32).to_string()).unwrap_or("--".to_string()))),
+            Text::new(format!(
+                "FPS: {}",
+                fps_counter
+                    .fps
+                    .map(|fps| (fps as u32).to_string())
+                    .unwrap_or("--".to_string())
+            )),
             TextFont {
                 font_size: 13.0,
                 ..default()
-            }
+            },
         )
     }
 );

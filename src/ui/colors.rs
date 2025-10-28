@@ -9,6 +9,7 @@ pub enum EditorColor {
     TabBar,
     Background,
     Text,
+    FadedText,
     TabHover,
     TabActive,
     Heading,
@@ -34,6 +35,7 @@ impl Default for UiColors {
         editor_colors.insert(EditorColor::TabBar, Srgba::hex("#2B2B2B").unwrap().into());
         editor_colors.insert(EditorColor::Background, Srgba::hex("#1B1B1B").unwrap().into());
         editor_colors.insert(EditorColor::Text, Color::WHITE);
+        editor_colors.insert(EditorColor::FadedText, Srgba::hex("#808080").unwrap().into());
         editor_colors.insert(EditorColor::TabHover, Srgba::hex("#353535").unwrap().into());
         editor_colors.insert(EditorColor::TabActive, Srgba::hex("#1B1B1B").unwrap().into());
         editor_colors.insert(EditorColor::Heading, Color::WHITE);

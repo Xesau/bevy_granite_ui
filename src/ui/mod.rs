@@ -28,14 +28,21 @@ impl Default for UiPlugin {
     }
 }
 
-#[derive(Message, Clone, Copy)]
+#[derive(Message, Clone)]
 pub enum UiEvent {
+    OpenMenu { id: String },
+    CloseMenus,
     SelectTab(usize),
     CloseTab(usize),
-    SelectTool(ToolButtonAction),
+    FileNew,
+    FileOpen,
+    FileSave,
+    FileSaveAs,
+    FileClose,
+    FileExit,
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone)]
 pub struct ClickAction(pub UiEvent);
 
 #[derive(Debug, Clone, Copy)]
@@ -89,6 +96,8 @@ impl Plugin for UiPlugin {
             .add_systems(Update, reactive_menu_bar_button)
             .add_systems(Update, reactive_fps_counter)
             .add_systems(Update, reactive_camera_preview)
+            .add_systems(Update, menu_bar_dropdown_visibility)
+            .add_systems(Update, handle_ui_events)
             .add_message::<UiEvent>()
             // Update UI elements
             .add_systems(Update, update_fps_counter)
@@ -133,28 +142,168 @@ fn setup_ui(
 
     commands.spawn((
         EditorUi,
+        Button,
+        ClickAction(UiEvent::CloseMenus),
         children![
             (
                 MenuBar,
                 children![
-                    (MenuBarButton {
-                        text: "File".to_string(),
-                    },),
-                    (MenuBarButton {
-                        text: "Edit".to_string(),
-                    },),
-                    (MenuBarButton {
-                        text: "View".to_string(),
-                    },),
-                    (MenuBarButton {
-                        text: "Camera".to_string(),
-                    },),
-                    (MenuBarButton {
-                        text: "Window".to_string(),
-                    },),
-                    (MenuBarButton {
-                        text: "Help".to_string(),
-                    },),
+                    (
+                        MenuBarDropdownRoot,
+                        children![
+                            (
+                                MenuBarButton {
+                                    text: "File".to_string(),
+                                    shortcut_text: None,
+                                    is_dropdown: true,
+                                    is_in_submenu: false,
+                                },
+                                ClickAction(UiEvent::OpenMenu {
+                                    id: "file".to_string()
+                                })
+                            ),
+                            (
+                                MenuBarDropdown {
+                                    id: "file".to_string()
+                                },
+                                children![
+                                    (
+                                        MenuBarButton {
+                                            text: "New".to_string(),
+                                            shortcut_text: Some("Ctrl+N".to_string()),
+                                            is_in_submenu: true,
+                                            is_dropdown: false,
+                                        },
+                                        ClickAction(UiEvent::FileNew)
+                                    ),
+                                    (
+                                        MenuBarButton {
+                                            text: "Open".to_string(),
+                                            shortcut_text: Some("Ctrl+O".to_string()),
+                                            is_in_submenu: true,
+                                            is_dropdown: false,
+                                        },
+                                        ClickAction(UiEvent::FileOpen)
+                                    ),
+                                    (
+                                        MenuBarButton {
+                                            text: "Save".to_string(),
+                                            shortcut_text: Some("Ctrl+S".to_string()),
+                                            is_in_submenu: true,
+                                            is_dropdown: false,
+                                        },
+                                        ClickAction(UiEvent::FileSave)
+                                    ),
+                                    (
+                                        MenuBarButton {
+                                            text: "Save As".to_string(),
+                                            shortcut_text: Some("Ctrl+Shift+S".to_string()),
+                                            is_in_submenu: true,
+                                            is_dropdown: false,
+                                        },
+                                        ClickAction(UiEvent::FileSaveAs)
+                                    ),
+                                    (
+                                        MenuBarButton {
+                                            text: "Close".to_string(),
+                                            shortcut_text: Some("Ctrl+W".to_string()),
+                                            is_in_submenu: true,
+                                            is_dropdown: false,
+                                        },
+                                        ClickAction(UiEvent::FileClose)
+                                    ),
+                                    (   MenuBarButton {
+                                            text: "Exit".to_string(),
+                                            shortcut_text: Some("Alt+F4".to_string()),
+                                            is_in_submenu: true,
+                                            is_dropdown: false,
+                                        },
+                                        ClickAction(UiEvent::FileExit)
+                                    )
+                                ]
+                            )
+                        ]
+                    ),
+                    (
+                        MenuBarDropdownRoot,
+                        children![
+                            (
+                                MenuBarButton {
+                                    text: "Edit".to_string(),
+                                    shortcut_text: None,
+                                    is_dropdown: false,
+                                    is_in_submenu: false,
+                                },
+                                ClickAction(UiEvent::OpenMenu {
+                                    id: "edit".to_string()
+                                })
+                            )
+                        ]
+                    ),
+                    (
+                        MenuBarDropdownRoot,
+                        children![
+                            (
+                                MenuBarButton {
+                                    text: "View".to_string(),
+                                    shortcut_text: None,
+                                    is_dropdown: false,
+                                    is_in_submenu: false,
+                                },
+                                ClickAction(UiEvent::OpenMenu {
+                                    id: "view".to_string()
+                                })
+                            )
+                        ]
+                    ),
+                    (
+                        MenuBarDropdownRoot,
+                        children![
+                            (
+                                MenuBarButton {
+                                    text: "Camera".to_string(),
+                                    shortcut_text: None,
+                                    is_dropdown: false,
+                                    is_in_submenu: false,
+                                },
+                                ClickAction(UiEvent::OpenMenu {
+                                    id: "camera".to_string()
+                                })
+                            )
+                        ]
+                    ),
+                    (
+                        MenuBarDropdownRoot,
+                        children![
+                            (
+                                MenuBarButton {
+                                    text: "Window".to_string(),
+                                    shortcut_text: None,
+                                    is_dropdown: false,
+                                    is_in_submenu: false,
+                                },
+                                ClickAction(UiEvent::OpenMenu {
+                                    id: "window".to_string()
+                                })
+                            )
+                        ]
+                    ),
+                    (
+                        MenuBarDropdownRoot,
+                        children![
+                            (
+                                MenuBarButton {
+                                    text: "Help".to_string(),
+                                    shortcut_text: None,
+                                    is_dropdown: false,
+                                    is_in_submenu: false,
+                                },
+                                ClickAction(UiEvent::OpenMenu {
+                                    id: "help".to_string()
+                                })
+                            )
+                        ]
+                    ),
                 ]
             ),
             (
@@ -269,4 +418,46 @@ fn update_fps_counter(
         .get(&FrameTimeDiagnosticsPlugin::FPS)
         .and_then(|fps| fps.smoothed())
         .map(|fps| fps as f32);
+}
+
+#[derive(Message, Clone)]
+pub struct MenuBarButtonClicked {
+    pub id: String,
+}
+
+fn menu_bar_dropdown_visibility(
+    mut menu_bar_dropdown: Query<(&MenuBarDropdown, &mut Visibility)>,
+    mut menu_bar_button_clicked_reader: MessageReader<UiEvent>,
+) {
+    // Update dropdown visibility based on the clicked button
+    for event in menu_bar_button_clicked_reader.read() {
+        match event {
+            UiEvent::OpenMenu { id } => {
+                for (menu_bar_dropdown, mut visibility) in menu_bar_dropdown.iter_mut() {
+                    *visibility = if menu_bar_dropdown.id == *id {
+                        Visibility::Visible
+                    } else {
+                        Visibility::Hidden
+                    };
+                }
+            }
+            // All other events close the menus
+            _ => {
+                for (_, mut visibility) in menu_bar_dropdown.iter_mut() {
+                    *visibility = Visibility::Hidden;
+                }
+            }
+        }
+    }
+}
+
+fn handle_ui_events(
+    query: Query<(&ClickAction, &Interaction), Changed<Interaction>>,
+    mut ui_event_writer: MessageWriter<UiEvent>,
+) {
+    for (click_action, interaction) in query.iter() {
+        if *interaction == Interaction::Pressed {
+            ui_event_writer.write(click_action.0.clone());
+        }
+    }
 }
