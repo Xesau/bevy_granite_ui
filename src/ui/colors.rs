@@ -1,5 +1,15 @@
 use bevy::{platform::collections::HashMap, prelude::*};
 
+pub struct ColorsPlugin;
+
+impl Plugin for ColorsPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(UiColors::default())
+            .add_systems(PostUpdate, update_colors)
+            .add_systems(PostUpdate, add_colors);
+    }
+}
+
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum EditorColor {
     MenuBar,

@@ -2,8 +2,7 @@ use bevy::{
     camera::{
         Viewport,
         visibility::{Layer, RenderLayers},
-    },
-    prelude::*,
+    }, ecs::system::command, prelude::*
 };
 
 pub mod colors;
@@ -11,11 +10,14 @@ pub mod elements;
 pub mod font;
 pub mod icons;
 pub mod shortcuts;
+pub mod fullscreen;
 
 use elements::*;
 
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+
+use crate::ui::fullscreen::FullscreenState;
 
 pub struct UiPlugin {
     pub editor_render_layer: Layer,
@@ -33,21 +35,29 @@ impl Default for UiPlugin {
 pub enum UiEvent {
     OpenMenu { id: String },
     CloseMenus,
-    SelectTab(usize),
-    CloseTab(usize),
     FileNew,
     FileOpen,
     FileSave,
     FileSaveAs,
     FileClose,
     FileExit,
+    ShowHelp,
+    Undo,
+    Redo,
+    SelectTool(Tool),
+    SelectTab(usize),
+    CloseTab(usize),
+    ToggleFullscreen,
+    NextTab,
+    PreviousTab,
 }
 
 #[derive(Component, Clone)]
 pub struct ClickAction(pub UiEvent);
 
-#[derive(Debug, Clone, Copy)]
-pub enum ToolButtonAction {
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Default)]
+pub enum Tool {
+    #[default]
     Pointer,
     Move,
     Rotate,
@@ -58,6 +68,10 @@ pub enum ToolButtonAction {
 
 #[derive(Resource)]
 pub struct EditorRenderLayer(Layer);
+
+#[derive(Resource, Default, Clone, Copy)]
+pub struct CurrentTab(pub Option<usize>);
+
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
@@ -76,34 +90,35 @@ impl Plugin for UiPlugin {
         }
 
         app
-            // Add default UI elements
-            .add_systems(Startup, setup_ui.after(icons::load_tool_button_icons)) // Load icons before UI is - setup
-            // Render layer
-            .insert_resource(EditorRenderLayer(self.editor_render_layer))
-            .add_systems(Update, add_render_layer)
-            // Fonts
-            .add_systems(Startup, font::load_font)
-            // Icons
-            .add_systems(Startup, icons::load_tool_button_icons)
-            // Colors
-            .insert_resource(colors::UiColors::default())
-            .add_systems(Update, colors::update_colors)
-            .add_systems(Update, colors::add_colors)
-            .add_systems(Update, update_camera_viewport)
-            // Reactive elements
-            .add_systems(Update, reactive_tab)
-            .add_systems(Update, reactive_tool_button)
-            .add_systems(Update, reactive_status_bar)
-            .add_systems(Update, reactive_menu_bar_button)
-            .add_systems(Update, reactive_fps_counter)
-            .add_systems(Update, reactive_camera_preview)
-            .add_systems(Update, menu_bar_dropdown_visibility)
-            .add_systems(Update, handle_ui_events)
+            .add_plugins(fullscreen::FullscreenPlugin)
+            .add_plugins(shortcuts::ShortcutsPlugin)
+            .add_plugins(colors::ColorsPlugin)
+            .add_plugins(elements::ElementsPlugin)
+            .add_plugins(font::FontPlugin)
+            .add_plugins(icons::IconsPlugin)
             .add_message::<UiEvent>()
+
+            .insert_resource(CurrentTab(Some(0)))
+            .insert_resource(EditorRenderLayer(self.editor_render_layer))
+
+            // Add default UI elements
+            // Make sure icons are loaded before UI is set up to avoid uninitialized Icons resource
+            .add_systems(Startup, setup_ui.after(icons::load_tool_button_icons))
+            // Render layer
+            .add_systems(Update, add_render_layer)
+            // Camera
+            .add_systems(Update, update_camera_viewport)
+            // UI events
+            .add_systems(Update, handle_click_action)
+            .add_systems(Update, handle_close_app)
+            .add_systems(Update, handle_toggle_fullscreen)
+            .add_systems(Update, handle_tab_events)
             // Update UI elements
             .add_systems(Update, update_fps_counter)
-            .add_plugins(shortcuts::ShortcutsPlugin)
-            .add_systems(Update, font::update_text_font);
+            .add_systems(Update, update_menu_dropdown_visibility)
+            .add_systems(Update, update_selected_tool_button)
+            // .add_systems(Update, update_current_tab)
+        ;
     }
 }
 
@@ -127,6 +142,7 @@ pub struct EditorUiElement;
 #[derive(Component)]
 pub struct EditorUiCamera;
 
+/// Sets up the default UI elements.
 fn setup_ui(
     mut commands: Commands,
     render_layer: Res<EditorRenderLayer>,
@@ -151,160 +167,37 @@ fn setup_ui(
             (
                 MenuBar,
                 children![
-                    (
-                        MenuBarDropdownRoot,
-                        children![
-                            (
-                                MenuBarButton {
-                                    text: "File".to_string(),
-                                    shortcut_text: None,
-                                    is_dropdown: true,
-                                    is_in_submenu: false,
-                                },
-                                ClickAction(UiEvent::OpenMenu {
-                                    id: "file".to_string()
-                                })
-                            ),
-                            (
-                                MenuBarDropdown {
-                                    id: "file".to_string()
-                                },
-                                children![
-                                    (
-                                        MenuBarButton {
-                                            text: "New".to_string(),
-                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileNew).map(|shortcut| shortcut.to_string()),
-                                            is_in_submenu: true,
-                                            is_dropdown: false,
-                                        },
-                                        ClickAction(UiEvent::FileNew)
-                                    ),
-                                    (
-                                        MenuBarButton {
-                                            text: "Open".to_string(),
-                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileOpen).map(|shortcut| shortcut.to_string()),
-                                            is_in_submenu: true,
-                                            is_dropdown: false,
-                                        },
-                                        ClickAction(UiEvent::FileOpen)
-                                    ),
-                                    (
-                                        MenuBarButton {
-                                            text: "Save".to_string(),
-                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileSave).map(|shortcut| shortcut.to_string()),
-                                            is_in_submenu: true,
-                                            is_dropdown: false,
-                                        },
-                                        ClickAction(UiEvent::FileSave)
-                                    ),
-                                    (
-                                        MenuBarButton {
-                                            text: "Save As".to_string(),
-                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileSaveAs).map(|shortcut| shortcut.to_string()),
-                                            is_in_submenu: true,
-                                            is_dropdown: false,
-                                        },
-                                        ClickAction(UiEvent::FileSaveAs)
-                                    ),
-                                    (
-                                        MenuBarButton {
-                                            text: "Close".to_string(),
-                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileClose).map(|shortcut| shortcut.to_string()),
-                                            is_in_submenu: true,
-                                            is_dropdown: false,
-                                        },
-                                        ClickAction(UiEvent::FileClose)
-                                    ),
-                                    (   MenuBarButton {
-                                            text: "Exit".to_string(),
-                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileExit).map(|shortcut| shortcut.to_string()),
-                                            is_in_submenu: true,
-                                            is_dropdown: false,
-                                        },
-                                        ClickAction(UiEvent::FileExit)
-                                    )
-                                ]
-                            )
+                    elements::menu_bar_dropdown!("File".to_string(), "file",
+                        [
+                            MenuBarButton::new("New".to_string(), UiEvent::FileNew, &shortcuts),
+                            MenuBarButton::new("Open".to_string(), UiEvent::FileOpen, &shortcuts),
+                            MenuBarButton::new("Save".to_string(), UiEvent::FileSave, &shortcuts),
+                            MenuBarButton::new("Save As".to_string(), UiEvent::FileSaveAs, &shortcuts),
+                            MenuBarButton::new("Close".to_string(), UiEvent::FileClose, &shortcuts),
+                            MenuBarButton::new("Exit".to_string(), UiEvent::FileExit, &shortcuts),
                         ]
                     ),
-                    (
-                        MenuBarDropdownRoot,
-                        children![
-                            (
-                                MenuBarButton {
-                                    text: "Edit".to_string(),
-                                    shortcut_text: None,
-                                    is_dropdown: false,
-                                    is_in_submenu: false,
-                                },
-                                ClickAction(UiEvent::OpenMenu {
-                                    id: "edit".to_string()
-                                })
-                            )
+                    elements::menu_bar_dropdown!("Edit".to_string(), "edit",
+                        [
+                            MenuBarButton::new("Undo".to_string(), UiEvent::Undo, &shortcuts),
+                            MenuBarButton::new("Redo".to_string(), UiEvent::Redo, &shortcuts),
                         ]
                     ),
-                    (
-                        MenuBarDropdownRoot,
-                        children![
-                            (
-                                MenuBarButton {
-                                    text: "View".to_string(),
-                                    shortcut_text: None,
-                                    is_dropdown: false,
-                                    is_in_submenu: false,
-                                },
-                                ClickAction(UiEvent::OpenMenu {
-                                    id: "view".to_string()
-                                })
-                            )
+                    elements::menu_bar_dropdown!("View".to_string(), "view",
+                        [
+                    	    MenuBarButton::new("Toggle Fullscreen".to_string(), UiEvent::ToggleFullscreen, &shortcuts),
+                            MenuBarButton::new("Next Tab".to_string(), UiEvent::NextTab, &shortcuts),
+                            MenuBarButton::new("Previous Tab".to_string(), UiEvent::PreviousTab, &shortcuts),
                         ]
                     ),
-                    (
-                        MenuBarDropdownRoot,
-                        children![
-                            (
-                                MenuBarButton {
-                                    text: "Camera".to_string(),
-                                    shortcut_text: None,
-                                    is_dropdown: false,
-                                    is_in_submenu: false,
-                                },
-                                ClickAction(UiEvent::OpenMenu {
-                                    id: "camera".to_string()
-                                })
-                            )
+                    elements::menu_bar_dropdown!("Camera".to_string(), "camera",
+                        [
+
                         ]
                     ),
-                    (
-                        MenuBarDropdownRoot,
-                        children![
-                            (
-                                MenuBarButton {
-                                    text: "Window".to_string(),
-                                    shortcut_text: None,
-                                    is_dropdown: false,
-                                    is_in_submenu: false,
-                                },
-                                ClickAction(UiEvent::OpenMenu {
-                                    id: "window".to_string()
-                                })
-                            )
-                        ]
-                    ),
-                    (
-                        MenuBarDropdownRoot,
-                        children![
-                            (
-                                MenuBarButton {
-                                    text: "Help".to_string(),
-                                    shortcut_text: None,
-                                    is_dropdown: false,
-                                    is_in_submenu: false,
-                                },
-                                ClickAction(UiEvent::OpenMenu {
-                                    id: "help".to_string()
-                                })
-                            )
+                    elements::menu_bar_dropdown!("Help".to_string(), "help",
+                        [
+                            MenuBarButton::new("Show Help".to_string(), UiEvent::ShowHelp, &shortcuts),
                         ]
                     ),
                 ]
@@ -312,18 +205,9 @@ fn setup_ui(
             (
                 TabBar,
                 children![
-                    Tab {
-                        name: "Tab 1".to_string(),
-                        is_active: true,
-                    },
-                    Tab {
-                        name: "Tab 2".to_string(),
-                        is_active: false,
-                    },
-                    Tab {
-                        name: "Tab 3".to_string(),
-                        is_active: false,
-                    }
+                    Tab::new(0, "Tab 1".to_string(), true),
+                    Tab::new(1, "Tab 2".to_string(), false),
+                    Tab::new(2, "Tab 3".to_string(), false),
                 ]
             ),
             (
@@ -335,45 +219,21 @@ fn setup_ui(
                             (
                                 ToolButtonGroup,
                                 children![
-                                    ToolButton {
-                                        action: ToolButtonAction::Pointer,
-                                        icon: tool_button_icons.pointer.clone(),
-                                        is_active: true
-                                    },
+                                    ToolButton::new(Tool::Pointer, true, tool_button_icons.pointer.clone()),
                                     ToolButtonSeparator,
-                                    ToolButton {
-                                        action: ToolButtonAction::Move,
-                                        icon: tool_button_icons.move_.clone(),
-                                        is_active: false
-                                    },
+                                    ToolButton::new(Tool::Move, false, tool_button_icons.move_.clone()),
                                     ToolButtonSeparator,
-                                    ToolButton {
-                                        action: ToolButtonAction::Rotate,
-                                        icon: tool_button_icons.rotate.clone(),
-                                        is_active: false
-                                    },
+                                    ToolButton::new(Tool::Rotate, false, tool_button_icons.rotate.clone()),
                                     ToolButtonSeparator,
-                                    ToolButton {
-                                        action: ToolButtonAction::Scale,
-                                        icon: tool_button_icons.scale.clone(),
-                                        is_active: false
-                                    },
+                                    ToolButton::new(Tool::Scale, false, tool_button_icons.scale.clone()),
                                 ]
                             ),
                             (
                                 ToolButtonGroup,
                                 children![
-                                    ToolButton {
-                                        action: ToolButtonAction::AddEntity,
-                                        icon: tool_button_icons.add_entity.clone(),
-                                        is_active: false
-                                    },
+                                    ToolButton::new(Tool::AddEntity, false, tool_button_icons.add_entity.clone()),
                                     ToolButtonSeparator,
-                                    ToolButton {
-                                        action: ToolButtonAction::ImportFile,
-                                        icon: tool_button_icons.add_prefab.clone(),
-                                        is_active: false
-                                    },
+                                    ToolButton::new(Tool::ImportFile, false, tool_button_icons.add_prefab.clone()),
                                 ]
                             )
                         ]
@@ -389,6 +249,8 @@ fn setup_ui(
     ));
 }
 
+/// Updates the camera viewport of the other cameras other than the EditorUiCamera
+/// to match the screen coordinates of the CameraPreview element in the UI.
 fn update_camera_viewport(
     mut other_cameras: Query<&mut Camera, Without<EditorUiCamera>>,
     camera_preview_position: Single<
@@ -413,6 +275,7 @@ fn update_camera_viewport(
     }
 }
 
+/// Updates FpsCounter component's fps field based on the FrameTimeDiagnosticsPlugin.
 fn update_fps_counter(
     mut fps_counter: Single<&mut FpsCounter>,
     diagnostics: Res<DiagnosticsStore>,
@@ -423,12 +286,22 @@ fn update_fps_counter(
         .map(|fps| fps as f32);
 }
 
-#[derive(Message, Clone)]
-pub struct MenuBarButtonClicked {
-    pub id: String,
+/// Updates ToolButton component's is_active field based on the selected tool.
+fn update_selected_tool_button(
+    mut tool_buttons: Query<&mut ToolButton>,
+    mut tool_button_clicked_reader: MessageReader<UiEvent>,
+) {
+    for event in tool_button_clicked_reader.read() {
+        if let UiEvent::SelectTool(tool) = event {
+            for mut tool_button in tool_buttons.iter_mut() {
+                tool_button.is_active = tool_button.action == *tool;
+            }
+        }
+    }
 }
 
-fn menu_bar_dropdown_visibility(
+/// Updates MenuBarDropdown component's visibility based on the clicked button.
+fn update_menu_dropdown_visibility(
     mut menu_bar_dropdown: Query<(&MenuBarDropdown, &mut Visibility)>,
     mut menu_bar_button_clicked_reader: MessageReader<UiEvent>,
 ) {
@@ -454,7 +327,7 @@ fn menu_bar_dropdown_visibility(
     }
 }
 
-fn handle_ui_events(
+fn handle_click_action(
     query: Query<(&ClickAction, &Interaction), Changed<Interaction>>,
     mut ui_event_writer: MessageWriter<UiEvent>,
 ) {
@@ -462,5 +335,68 @@ fn handle_ui_events(
         if *interaction == Interaction::Pressed {
             ui_event_writer.write(click_action.0.clone());
         }
+    }
+}
+
+pub fn handle_close_app(
+    mut ui_event_reader: MessageReader<UiEvent>,
+    mut app_exit_writer: MessageWriter<AppExit>,
+) {
+    for event in ui_event_reader.read() {
+        if let UiEvent::FileExit = event {
+            app_exit_writer.write(AppExit::Success);
+        }
+    }
+}
+
+fn handle_toggle_fullscreen(
+    mut ui_event_reader: MessageReader<UiEvent>,
+    fullscreen_state: Res<State<FullscreenState>>,
+    mut next_state: ResMut<NextState<FullscreenState>>,
+) {
+    for event in ui_event_reader.read() {
+        if let UiEvent::ToggleFullscreen = event {
+            next_state.set(if fullscreen_state.get() == &FullscreenState::Normal {
+                FullscreenState::Fullscreen
+            } else {
+                FullscreenState::Normal
+            });
+        }
+    }
+}
+
+// Handle next, previous and select tab
+fn handle_tab_events(
+    mut ui_event_reader: MessageReader<UiEvent>,
+    mut current_tab: ResMut<CurrentTab>,
+) {
+    let tab_count = 3;
+    for event in ui_event_reader.read() {
+        if let UiEvent::NextTab = event {
+            // Wrap around to the first tab if the current tab is the last tab
+            current_tab.0 = if tab_count == 0 { None } else { Some((current_tab.0.unwrap_or(0) + 1) % tab_count) };
+        }
+        if let UiEvent::PreviousTab = event {
+            // Wrap around to the last tab if the current tab is the first tab
+            current_tab.0 = if tab_count == 0 { None } else { Some((tab_count + current_tab.0.unwrap_or(0) - 1) % tab_count) };
+        }
+        if let UiEvent::SelectTab(index) = event {
+            // Clamp the index to the range of the tab count
+            current_tab.0 = Some((*index).max(0).min(tab_count - 1));
+        }
+    }
+}
+
+/// Updates Tab component's is_active field based on the CurrentTab resource.
+fn update_current_tab(
+    current_tab: Res<CurrentTab>,
+    mut tabs: Query<(Entity, &Tab)>,
+    mut commands: Commands,
+) {
+    for (entity, tab) in tabs.iter() {
+        commands.entity(entity).insert(Tab {
+            is_active: Some(tab.index) == current_tab.0,
+            ..((*tab).clone())
+        });
     }
 }

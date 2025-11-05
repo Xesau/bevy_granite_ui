@@ -1,9 +1,22 @@
 use crate::ui::{
-    EditorUiElement, ToolButtonAction,
-    colors::{EditorBackgroundColor, EditorColor, EditorTextColor},
+    ClickAction, EditorUiElement, Tool, UiEvent, colors::{EditorBackgroundColor, EditorColor, EditorTextColor}, fullscreen::NodeFullscreenDisplay, shortcuts::Shortcuts
 };
 use bevy::prelude::*;
 
+pub struct ElementsPlugin;
+
+impl Plugin for ElementsPlugin {
+    fn build(&self, app: &mut App) {
+        // Reactive elements are updated in PostUpdate, because changes to the components
+        // are done in Update.
+        app.add_systems(PostUpdate, reactive_menu_bar_button)
+            .add_systems(PostUpdate, reactive_tab)
+            .add_systems(PostUpdate, reactive_tool_button)
+            .add_systems(PostUpdate, reactive_status_bar)
+            .add_systems(PostUpdate, reactive_fps_counter)
+            .add_systems(PostUpdate, reactive_camera_preview);
+    }
+}
 /// This macro is used to create a reactive element.
 /// It is currently not very performant because it despawns and re-inserts the entire entity every time the data changes.
 macro_rules! reactive_element {
@@ -40,6 +53,7 @@ pub struct EditorUi;
 #[derive(Component)]
 #[require(EditorUiElement)]
 #[require(EditorBackgroundColor(EditorColor::MenuBar, None, None))]
+#[require(NodeFullscreenDisplay::new(Display::Flex, Display::None))]
 #[require(Node {
     display: Display::Flex,
     height: Val::Px(39.0),
@@ -65,6 +79,50 @@ pub struct MenuBarButton {
     ..default()
 })]
 pub struct MenuBarDropdownRoot;
+
+#[macro_export]
+macro_rules! menu_bar_dropdown {
+    ($text:expr, $id:literal, $children:tt) => {
+        (
+            MenuBarDropdownRoot,
+            children![
+                (
+                    MenuBarButton {
+                        text: $text,
+                        shortcut_text: None,
+                        is_dropdown: true,
+                        is_in_submenu: false,
+                    },
+                    ClickAction(UiEvent::OpenMenu {
+                        id: $id.to_string()
+                    })
+                ),
+                (
+                    MenuBarDropdown {
+                        id: $id.to_string()
+                    },
+                    children!$children
+                )
+            ]
+        )
+    };
+}
+
+impl MenuBarButton {
+    pub fn new(text: String, event: UiEvent, shortcuts: &Shortcuts) -> impl Bundle {
+        (
+            MenuBarButton {
+                text: text,
+                shortcut_text: shortcuts.get_shortcut(&event).map(|shortcut| shortcut.to_string()),
+                is_in_submenu: true,
+                is_dropdown: false,
+            },
+            ClickAction(event)
+        )
+    }
+}
+
+pub use menu_bar_dropdown;
 
 #[derive(Component)]
 #[require(Node {
@@ -164,10 +222,17 @@ reactive_element!(
 })]
 pub struct TabBar;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Tab {
+    pub index: usize,
     pub name: String,
     pub is_active: bool,
+}
+
+impl Tab {
+    pub fn new(index: usize, name: String, is_active: bool) -> Self {
+        Self { index, name, is_active }
+    }
 }
 
 reactive_element!(Tab, reactive_tab, |tab: &Tab| {
@@ -298,9 +363,15 @@ pub struct ToolButtonSeparator;
 
 #[derive(Component)]
 pub struct ToolButton {
-    pub action: ToolButtonAction,
+    pub action: Tool,
     pub is_active: bool,
     pub icon: Handle<Image>,
+}
+
+impl ToolButton {
+    pub fn new(action: Tool, is_active: bool, icon: Handle<Image>) -> Self {
+        Self { action, is_active, icon }
+    }
 }
 
 reactive_element!(
@@ -323,9 +394,11 @@ reactive_element!(
                 } else {
                     EditorColor::Button
                 },
-                None,
+                Some(EditorColor::Background),
                 None,
             ),
+            Button,
+            ClickAction(UiEvent::SelectTool(tool_button.action)),
             BorderRadius::all(Val::Px(3.0)),
             children![(
                 EditorUiElement,

@@ -2,6 +2,15 @@ use bevy::prelude::*;
 
 use crate::ui::EditorUiElement;
 
+pub struct FontPlugin;
+
+impl Plugin for FontPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, load_font)
+            .add_systems(Update, update_text_font);
+    }
+}
+
 #[derive(Resource, Deref, Clone)]
 pub struct FontHandle(pub Handle<Font>);
 

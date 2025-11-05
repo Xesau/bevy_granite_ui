@@ -1,5 +1,13 @@
 use bevy::prelude::*;
 
+pub struct IconsPlugin;
+
+impl Plugin for IconsPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, load_tool_button_icons);
+    }
+}
+
 #[derive(Resource)]
 pub struct ToolButtonIcons {
     pub pointer: Handle<Image>,
