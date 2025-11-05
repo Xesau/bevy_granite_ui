@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 bevy_dylib = "=0.17.0"
 bevy = { version = "0.17.0", features = ["dynamic_linking"] }
+smallvec = "1.15.1"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

@@ -10,6 +10,7 @@ pub mod colors;
 pub mod elements;
 pub mod font;
 pub mod icons;
+pub mod shortcuts;
 
 use elements::*;
 
@@ -28,7 +29,7 @@ impl Default for UiPlugin {
     }
 }
 
-#[derive(Message, Clone)]
+#[derive(Message, Hash, Eq, PartialEq, Clone, Debug)]
 pub enum UiEvent {
     OpenMenu { id: String },
     CloseMenus,
@@ -101,6 +102,7 @@ impl Plugin for UiPlugin {
             .add_message::<UiEvent>()
             // Update UI elements
             .add_systems(Update, update_fps_counter)
+            .add_plugins(shortcuts::ShortcutsPlugin)
             .add_systems(Update, font::update_text_font);
     }
 }
@@ -129,6 +131,7 @@ fn setup_ui(
     mut commands: Commands,
     render_layer: Res<EditorRenderLayer>,
     tool_button_icons: Res<icons::ToolButtonIcons>,
+    shortcuts: Res<shortcuts::Shortcuts>,
 ) {
     commands.spawn((
         EditorUiCamera,
@@ -170,7 +173,7 @@ fn setup_ui(
                                     (
                                         MenuBarButton {
                                             text: "New".to_string(),
-                                            shortcut_text: Some("Ctrl+N".to_string()),
+                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileNew).map(|shortcut| shortcut.to_string()),
                                             is_in_submenu: true,
                                             is_dropdown: false,
                                         },
@@ -179,7 +182,7 @@ fn setup_ui(
                                     (
                                         MenuBarButton {
                                             text: "Open".to_string(),
-                                            shortcut_text: Some("Ctrl+O".to_string()),
+                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileOpen).map(|shortcut| shortcut.to_string()),
                                             is_in_submenu: true,
                                             is_dropdown: false,
                                         },
@@ -188,7 +191,7 @@ fn setup_ui(
                                     (
                                         MenuBarButton {
                                             text: "Save".to_string(),
-                                            shortcut_text: Some("Ctrl+S".to_string()),
+                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileSave).map(|shortcut| shortcut.to_string()),
                                             is_in_submenu: true,
                                             is_dropdown: false,
                                         },
@@ -197,7 +200,7 @@ fn setup_ui(
                                     (
                                         MenuBarButton {
                                             text: "Save As".to_string(),
-                                            shortcut_text: Some("Ctrl+Shift+S".to_string()),
+                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileSaveAs).map(|shortcut| shortcut.to_string()),
                                             is_in_submenu: true,
                                             is_dropdown: false,
                                         },
@@ -206,7 +209,7 @@ fn setup_ui(
                                     (
                                         MenuBarButton {
                                             text: "Close".to_string(),
-                                            shortcut_text: Some("Ctrl+W".to_string()),
+                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileClose).map(|shortcut| shortcut.to_string()),
                                             is_in_submenu: true,
                                             is_dropdown: false,
                                         },
@@ -214,7 +217,7 @@ fn setup_ui(
                                     ),
                                     (   MenuBarButton {
                                             text: "Exit".to_string(),
-                                            shortcut_text: Some("Alt+F4".to_string()),
+                                            shortcut_text: shortcuts.get_shortcut(UiEvent::FileExit).map(|shortcut| shortcut.to_string()),
                                             is_in_submenu: true,
                                             is_dropdown: false,
                                         },
