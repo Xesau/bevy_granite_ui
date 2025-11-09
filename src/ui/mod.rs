@@ -2,7 +2,7 @@ use bevy::{
     camera::{
         Viewport,
         visibility::{Layer, RenderLayers},
-    }, ecs::system::command, prelude::*
+    }, prelude::*
 };
 
 pub mod colors;
@@ -117,7 +117,7 @@ impl Plugin for UiPlugin {
             .add_systems(Update, update_fps_counter)
             .add_systems(Update, update_menu_dropdown_visibility)
             .add_systems(Update, update_selected_tool_button)
-            // .add_systems(Update, update_current_tab)
+            .add_systems(Update, update_current_tab.run_if(resource_changed::<CurrentTab>))
         ;
     }
 }
@@ -390,13 +390,16 @@ fn handle_tab_events(
 /// Updates Tab component's is_active field based on the CurrentTab resource.
 fn update_current_tab(
     current_tab: Res<CurrentTab>,
-    mut tabs: Query<(Entity, &Tab)>,
+    tabs: Query<(Entity, &Tab)>,
     mut commands: Commands,
 ) {
     for (entity, tab) in tabs.iter() {
-        commands.entity(entity).insert(Tab {
-            is_active: Some(tab.index) == current_tab.0,
-            ..((*tab).clone())
-        });
+        let new_active=  Some(tab.index) == current_tab.0;
+        if new_active != tab.is_active {
+            commands.entity(entity).insert(Tab {
+                is_active: new_active,
+                ..((*tab).clone())
+            });
+        }
     }
 }

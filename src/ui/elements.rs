@@ -239,6 +239,7 @@ reactive_element!(Tab, reactive_tab, |tab: &Tab| {
     (
         EditorUiElement,
         Button,
+        ClickAction(UiEvent::SelectTab(tab.index)),
         Node {
             display: Display::Flex,
             height: Val::Px(38.0),
@@ -288,6 +289,7 @@ reactive_element!(Tab, reactive_tab, |tab: &Tab| {
             (
                 EditorUiElement,
                 Button,
+                ClickAction(UiEvent::CloseTab(tab.index)),
                 Node {
                     display: if tab.is_active {
                         Display::Flex
