@@ -212,8 +212,8 @@ reactive_element!(
 #[derive(Component)]
 #[require(EditorUiElement)]
 #[require(EditorBackgroundColor(EditorColor::TabBar, None, None))]
+#[require(NodeFullscreenDisplay::new(Display::Flex, Display::None))]
 #[require(Node {
-    display: Display::Flex,
     height: Val::Px(50.0),
     width: Val::Percent(100.0),
     column_gap: Val::Px(10.0),
@@ -318,8 +318,8 @@ reactive_element!(Tab, reactive_tab, |tab: &Tab| {
 
 #[derive(Component)]
 #[require(EditorUiElement)]
+#[require(NodeFullscreenDisplay::new(Display::Flex, Display::None))]
 #[require(Node {
-    display: Display::Flex,
     padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(6.0), Val::Px(6.0)),
     align_items: AlignItems::Center,
     justify_content: JustifyContent::SpaceBetween,
@@ -426,8 +426,8 @@ pub struct StatusBar {
 reactive_element!(StatusBar, reactive_status_bar, |status_bar: &StatusBar| {
     (
         EditorUiElement,
+        NodeFullscreenDisplay::new(Display::Flex, Display::None),
         Node {
-            display: Display::Flex,
             height: Val::Px(20.0),
             align_items: AlignItems::Center,
             padding: UiRect::all(Val::Px(10.0)),
